@@ -24,7 +24,10 @@ VERSION_XDEBUG=2.3.3
 VERSION_ZLIB=1.2.8
 
 # OpenSSL https://www.openssl.org/source/
-VERSION_OPENSSL=1.0.2f
+VERSION_OPENSSL=1.0.2g
+
+# libssh2 https://www.libssh2.org/download/
+VERSION_LIBSSH2=1.7.0
 
 # curl https://curl.haxx.se/download/
 VERSION_CURL=7.47.1
@@ -56,14 +59,31 @@ wget http://www.openssl.org/source/openssl-$VERSION_OPENSSL.tar.gz
 tar -zxf openssl-$VERSION_OPENSSL.tar.gz
 rm openssl-$VERSION_OPENSSL.tar.gz
 cd openssl-$VERSION_OPENSSL
-./configure \
+./config \
 --prefix=$OPENSHIFT_RUNTIME_DIR/srv/openssl \
-shared --with-zlib=$OPENSHIFT_RUNTIME_DIR/srv/zlib
+--with-zlib-lib=$OPENSHIFT_RUNTIME_DIR/srv/zlib/lib \
+--with-zlib-include=$OPENSHIFT_RUNTIME_DIR/srv/zlib/include \
+shared zlib
 
 make && make install
 cd ..
 
-rm -rF openssl-$VERSION_OPENSSL
+rm -rf openssl-$VERSION_OPENSSL
+
+echo "Install libssh2"
+wget http://www.libssh2.org/download/libssh2-$VERSION_LIBSSH2.tar.gz
+
+tar -zxf libssh2-$VERSION_LIBSSH2.tar.gz
+rm libssh2-$VERSION_LIBSSH2.tar.gz
+cd libssh2-$VERSION_LIBSSH2
+./configure \
+--prefix=$OPENSHIFT_RUNTIME_DIR/srv/openssl \
+--with-ssl=$OPENSHIFT_RUNTIME_DIR/srv/openssl
+
+make && make install
+cd ..
+
+rm -rf libssh2-$VERSION_LIBSSH2
 
 echo "Install curl"
 wget https://curl.haxx.se/download/curl-$VERSION_CURL.tar.gz
@@ -71,15 +91,16 @@ wget https://curl.haxx.se/download/curl-$VERSION_CURL.tar.gz
 tar -zxf curl-$VERSION_CURL.tar.gz
 rm curl-$VERSION_CURL.tar.gz
 cd curl-$VERSION_CURL
-./configure \
+env LDFLAGS=-R$OPENSHIFT_RUNTIME_DIR/srv/openssl/lib ./configure \
 --enable-libcurl-option \
 --with-ssl=$OPENSHIFT_RUNTIME_DIR/srv/openssl \
+--with-libssh2=$OPENSHIFT_RUNTIME_DIR/srv/openssl \
 --prefix=$OPENSHIFT_RUNTIME_DIR/srv/curl
 
 make && make install
 cd ..
 
-rm -rF curl-$VERSION_CURL
+rm -rf curl-$VERSION_CURL
 
 echo "Install pcre"
 wget ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre-$VERSION_PCRE.tar.gz
@@ -107,13 +128,14 @@ cd httpd-$VERSION_APACHE
 --prefix=$OPENSHIFT_RUNTIME_DIR/srv/httpd \
 --with-included-apr \
 --with-pcre=$OPENSHIFT_RUNTIME_DIR/srv/pcre \
+--with-ssl=$OPENSHIFT_RUNTIME_DIR/srv/openssl \
 --enable-so \
---enable-auth-digest \
---enable-rewrite \
---enable-setenvif \
---enable-mime \
---enable-deflate \
---enable-headers
+--enable-ssl \
+--enable-modules=all \
+--enable-mods-shared=all \
+--disable-dav \
+--disable-dav_fs
+
 make && make install
 cd ..
 
@@ -142,6 +164,8 @@ if [ "git" = $VERSION_PHP ]
 	cd ..
 
 	export YACC=$OPENSHIFT_RUNTIME_DIR/tmp/bison/bin/bison
+	
+	export PKG_CONFIG_PATH=$OPENSHIFT_RUNTIME_DIR/srv/openssl/lib/pkgconfig
 
     wget https://github.com/php/php-src/archive/master.tar.gz
     tar -zxf master.tar.gz
@@ -164,7 +188,8 @@ fi
 --with-gd \
 --with-curl=$OPENSHIFT_RUNTIME_DIR/srv/curl \
 --with-mysqli \
---with-openssl=$OPENSHIFT_RUNTIME_DIR/srv/openssl \
+--with-openssl \
+--with-openssl-dir=$OPENSHIFT_RUNTIME_DIR/srv/openssl \
 --enable-mbstring \
 --enable-zip
 #--enable-intl \
